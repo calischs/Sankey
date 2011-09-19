@@ -1,0 +1,183 @@
+\documentclass[11pt]{article}
+\usepackage[top=1in,bottom=.75in,left=.75in,right=.75in,portrait]{geometry}
+\usepackage{multicol}
+\usepackage{fancyhdr}
+\usepackage{palatino}
+\usepackage{fancybox}
+\usepackage{epsfig,graphicx}
+\usepackage[small,compact]{titlesec}
+\usepackage[small,it]{caption}
+\usepackage[usenames,dvipsnames]{color}
+\usepackage[bookmarks=false,colorlinks=true,linkcolor={blue},pdfstartview={XYZ null null 1.22}]{hyperref}
+\usepackage{amsmath, amssymb, graphics}
+\newcommand{\mathsym}[1]{{}}
+\newcommand{\unicode}{{}}
+\usepackage{multirow}
+
+\pagestyle{fancy}
+\usepackage{subfig}
+\usepackage{color}
+
+\usepackage{rotating}
+\usepackage{float}
+\usepackage{rotfloat}
+\floatstyle{boxed} 
+\restylefloat{figure}
+
+
+
+\begin{document}
+
+\title{Drawing Sankeys: Notes}
+\author{Sam Calisch}
+\date{\today}
+\maketitle
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%
+\section{General Structure}
+Nodes are specified as a list.  The columns are subsets of this list.  Flow Data input as matrix $\left( a_{ij} \right)$ where $a_{ij}$ is the value of flow from node $i$ to node $j$.
+
+There are (at least) three drawing factors affecting readability of Sankey diagrams.
+\begin{itemize}
+\item Position of Nodes,
+\item Branching order, 
+\item Horizontal Offset, and 
+\item The curves of the flows.
+\end{itemize}
+
+We'll address them in the order of dependency.
+
+
+%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%
+\section{Node positioning}
+
+To position the columns horizontally, I use two parameters:
+\begin{enumerate}
+\item $gaps$: the distances between consecutive columns.  It's a list of length $numColumns - 1$.The same value works for most all sankeys, but in extreme cases with a lot of stuff flying around, I bump it up.
+\item $widths$: the horizontal width of nodes in each column.  It's a list of length $numColumns$.  It probably could just be one value for all columns.
+\end{enumerate}
+
+To position the nodes within each column, I use two other parameters:
+\begin{enumerate}
+\item $betweenSpaces$: the vertical distance between nodes in each column.
+\item $startys$: the starting Y value for each column.
+\end{enumerate}
+
+From these, we draw the bottom-left corner of the $j^{th}$ node in the $i^{th}$ column at
+\begin{equation*}
+X_{min} = \sum_{k=0}^{i-1}(widths(k) + gaps(k))
+\end{equation*}
+\begin{equation*}
+Y_{min} =  startys(i) + j*betweenSpace(i) + \sum_{k=0}^{j-1} nodesheights(k)
+\end{equation*}
+
+The top-right corner of the same node is:
+\begin{equation*}
+X_{max} = \sum_{k=0}^{i}widths(k) +  \sum_{k=0}^{i-1}gaps(k)
+\end{equation*}
+\begin{equation*}
+Y_{max} = startys(i) + j*betweenSpace(i) + \sum_{k=0}^{j} nodesheights(k)
+\end{equation*}
+
+
+%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%
+\section{Branching Order}
+\autoref{fig:branchorder} and \autoref{fig:branchorder2} show how to determine branching order.  \autoref{fig:branchorder2} is really the better diagram.
+
+Essentially, for two flows terminating at the same column, the branching order is determined by the change in $y$ values between the bottom of the start node and the bottom of the terminating node.  The flow which falls the most is drawn before (i.e. below) flows falling less.
+
+This works unless we compare flows terminating in different columns.  We deal with this recursively.  First determine the order of the flows terminating one column from the origin column.  Then determine the order of flows terminating two columns away and inject this into the first ordering at the spot representing a rise/fall of zero.  Continue recursively.
+
+
+\begin{figure}
+\center{
+\includegraphics[width=5in]{./Images/sankeyDrawingNotes1.jpg}
+}
+\caption{ Determining branching order. \label{fig:branchorder}}
+\end{figure}
+
+\begin{figure}
+\center{
+\includegraphics[width=5in]{./Images/sankeyHeuristics.jpg}
+}
+\caption{ Determining Branching order. Drawing 2. \label{fig:branchorder2}}
+\end{figure}d
+
+
+%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%
+\section{Horizontal Offset}
+Where flows collect at the input of output of a node things can get complicated -- especially when we start making curves as described in the next section.  To try to manage this, I use a differing horizontal offset, $X$, for each flow before they start to curve.  \autoref{fig:horoff} and \autoref{fig:flowcurves} show this. 
+
+My method keeps some flows off of each other, but it could be better.  If you can figure out a better heuristic, I'd be appreciative.
+
+The way it works is opposite for up-sloping and down-sloping flows.  Consider down-sloping ones first.  In plain english, we want the flows early in the branch order (i.e., the bottom flows) to bend away quickly, while the flows later (i.e., higher) should continue horizontally for a bit to give the earlier flows time to get out of the way.  I know this is complicated, hopefully the picture helps.  
+
+To do this, I set $y_{bottom}$ and $y_{top}$ to be the $y$ values of the bottom and top of the node rectangle, respectively.  For the $i^{th}$ downsloping flow, let $y_i$ be its starting $y$ value (this is determined by branching order and the thickness of the previous flows).  Then, I let 
+\begin{equation*}
+X = \frac{1}{2}\left( y_i - y_{bottom} \right).
+\end{equation*}
+So the horizontal offset grows from zero to almost $\frac{1}{2}(y_{top} - y_{bottom})$ as we proceed through the branch ordering of down-sloping flows.
+
+For up-sloping strands, I set
+\begin{equation*}
+X = \frac{1}{2}\left( y_{top} - y_{i} \right).
+\end{equation*}
+so the horizontal offset shrinks from nearly $\frac{1}{2}(y_{top} - y_{bottom})$ to zero as we proceed.
+
+Any node will usually have both down-sloping and up-sloping flows.  The branch order will segregate these to the bottom and top, respectively, so the horizontal offset will start at zero at the bottom, grow to a maximum, and shrink again down to zero.
+
+For flows which do not terminate in the next column, we add the width of the intermediate columns and gaps to the horizontal offset and compute as above.
+
+We've focused on outgoing flows, but the same convention governs horizontal offsets of incoming flows to nodes, albeit reflected about a vertical axis.  The effect of this is simply to interchange the up- and down-sloping equations.
+
+\begin{figure}
+\center{
+\includegraphics[width=5in]{./Images/sankeyHeuristics2.jpg}
+}
+\caption{ Horizontal offset. \label{fig:horoff}}
+\end{figure}
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%
+\section{Drawing Flows}
+Now to the trickiest and sexiest part.  First, let's define the input to drawing a flow (sometimes called ``strands" in the code):
+\begin{itemize}
+\item $t$: the thickness of a flow.  At all points this must remain constant, as measured perpendicularly from the bottom border of the flow.  This value comes from the data file.
+\item $\{x_1, y_1\}$: the point specifying the bottom-left corner of the curvy part of the flow.  This starts after the horizontal offset and the translation from branch ordering.
+\item $\{x_2, y_2\}$: the point specifying the bottom-right corner of the curvy part.  Similar.
+\end{itemize}
+
+In the following, I'll describe my method for computing the curves.  It could be possible to use splines, but care must be taken to ensure the flow has constant thickness at all points.  In order to do this, I use a region defined by concentric circular sections, followed by a sloped rectangle, followed by the same concentric circular section region (but rotated 180$^\circ$).  See \autoref{fig:flowcurves} and \autoref{fig:flowcurves2}.
+
+Using the conventions shown in these figures, the variables must satisfy
+\begin{equation*}
+\tan{\theta} = \frac{y_2 - y_1 + (2r+t)\cos{\theta}}{x_2 - x_1 + (2r+t)\sin{\theta}}
+\end{equation*}
+in order to flow smoothly.
+
+We set $r=\frac{1}{4}(x_2 - x_1)$ (for no other reason than that it seems to work) and solve for $\theta$.  Without loss of generality, say $(x_1,y_2) = (0,0)$.  Thus, $\theta$ is determined by $(x_2 - x_1)$, $(y_2-y_1)$, and $t$.  Note that if $\theta_0$ solves the system for a choice of $(x_2 - x_1)$, $(y_2-y_1)$, and $t$, then it also solves the system for $a(x_2 - x_1)$, $a(y_2-y_1)$, and $at$ for a scale factor $a$.  In loose language, the same $\theta$ works for a short, thin strand as well as a long, thick strand of the same slope.  This means we can eliminate one variable.  If we precompute a reasonable grid over the resulting two-dimensional space, we can avoid doing any equation solving in the javascript.  I'll give you this look-up table.
+
+\begin{figure}
+\center{
+\includegraphics[width=5in]{./Images/sankeyDrawingNotes2.jpg}
+}
+\caption{Computing the flow curves.  \label{fig:flowcurves}}
+\end{figure}
+
+\begin{figure}
+\center{
+\includegraphics[width=6in]{./Images/sankeyHeuristics1.jpg}
+}
+\caption{ Computing flow curves \label{fig:flowcurves2}}
+\end{figure}
+
+\end{document}
