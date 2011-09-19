@@ -1,1 +1,3 @@
-Test thing.
+This repository contains a mathematica notebook with source for drawing Sankey diagrams, as well as a few example commands.
+
+There are also notes on the heuristics used to generate the graphics.
